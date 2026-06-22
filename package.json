@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@emailjs/nodejs": "^5.0.2",
     "clsx": "^2.1.1",
     "email-js": "^2.0.3",
     "lucide-react": "^1.21.0",
