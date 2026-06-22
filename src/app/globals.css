@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+:root {
+  /* Design tokens */
+  --cream: #FBF6EC;
+  --ink: #2B2A28;
+  --orange: #F2913D;
+  --orange-dark: #D9722A;
+  --sky: #8FCFE3;
+  --sky-dark: #4FA8C4;
+  --pink: #F4A8C6;
+  --pink-dark: #E2729E;
+  --yellow: #F6C453;
+  --paper: #FFFFFF;
+
+  --background: var(--cream);
+  --foreground: var(--ink);
+}
+
+@theme inline {
+  --color-cream: var(--cream);
+  --color-ink: var(--ink);
+  --color-orange: var(--orange);
+  --color-orange-dark: var(--orange-dark);
+  --color-sky: var(--sky);
+  --color-sky-dark: var(--sky-dark);
+  --color-pink: var(--pink);
+  --color-pink-dark: var(--pink-dark);
+  --color-yellow: var(--yellow);
+  --color-paper: var(--paper);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Nunito", "Quicksand", "Segoe UI Rounded", "Segoe UI", system-ui,
+    -apple-system, sans-serif;
+}
+
+h1, h2, h3, h4, .font-display {
+  font-family: "Baloo 2", "Fredoka", "Quicksand", "Segoe UI Rounded", "Comic Sans MS",
+    system-ui, sans-serif;
+}
+
+/* Hand-drawn scribble underline, our signature element */
+.scribble-underline {
+  position: relative;
+  display: inline-block;
+}
+.scribble-underline svg {
+  position: absolute;
+  left: -2%;
+  bottom: -0.18em;
+  width: 104%;
+  height: 0.35em;
+  pointer-events: none;
+}
+
+/* Wobbly card border radius for hand-made feel */
+.wobble {
+  border-radius: 1.75rem 1.5rem 1.75rem 1.6rem;
+}
+
+/* Soft crayon shadow */
+.crayon-shadow {
+  box-shadow: 0 10px 0 -2px rgba(43,42,40,0.06), 0 14px 24px -10px rgba(43,42,40,0.18);
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-10px) rotate(3deg); }
+}
+.animate-float {
+  animation: float-slow 6s ease-in-out infinite;
+}
+
+@keyframes float-slow-2 {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(8px) rotate(-4deg); }
+}
+.animate-float-2 {
+  animation: float-slow-2 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float, .animate-float-2 {
+    animation: none;
+  }
+}
+
+/* Focus visibility */
+a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 3px solid var(--sky-dark);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
