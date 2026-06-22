@@ -177,7 +177,7 @@ export default function Home() {
               <div className="aspect-[4/3] wobble overflow-hidden crayon-shadow bg-[var(--sky)]">
                 <video
                   className="w-full h-full object-cover"
-                  src="/hero-video.mp4"
+                  src="/hero-vid.mp4"
                   poster="/hero-poster.jpg"
                   controls
                   loop
