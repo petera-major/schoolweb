@@ -396,7 +396,7 @@ export default function Home() {
                 registration.
               </p>
               <div className="grid grid-cols-2 gap-3">
-                {["3T–4T", "4T–5T", "5T–6T", "6T–7T", "7T–8T", "9T–10T"].map((size) => (
+                {["3T–4T", "4T–5T", "5T–6T", "6x–7", "7–8", "9–10"].map((size) => (
                   <div
                     key={size}
                     className="bg-white rounded-xl py-3 text-center font-bold font-display text-lg crayon-shadow"
