@@ -23,14 +23,14 @@ const PROGRAMS = [
   { value: "grade1", label: "Grade 1 Aftercare (6 – 8 years)" },
 ];
 
-const UNIFORM_SIZES = ["3T–4T", "4T–5T", "5T–6T", "6T–7T", "7T–8T", "9T–10T"];
+const UNIFORM_SIZES = ["3T–4T", "4T–5T", "5T–6T", "6x–7", "7–8", "9–10"];
 
 const POLICIES = [
   "Fees are due by the end of each month for the following month.",
   "A $25 late fee applies to late payments and is non-negotiable.",
   "Withdrawing from the school requires a 30% return fee.",
   "Uniforms must be purchased from the school and display the school logo.",
-  "Early drop-off (8:00 AM) must be arranged in advance with administration.",
+  "Early drop-off (7:30 AM) must be arranged in advance with administration.",
   "Proof of insurance is mandatory for every enrolled student.",
   "Children with a contagious illness or symptoms must stay home.",
 ];
@@ -362,7 +362,7 @@ export default function RegisterPage() {
 
               <div>
                 <label className="font-bold text-sm mb-1.5 block">
-                  Emergency Contact <span className="opacity-50 font-normal">(optional)</span>
+                  Emergency Contact <span className="text-[var(--orange-dark)]">*</span>
                 </label>
                 <input
                   type="text"

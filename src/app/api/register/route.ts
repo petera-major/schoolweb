@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
 import { randomUUID } from "crypto";
 import emailjs from "@emailjs/nodejs";
+import { supabaseAdmin, REGISTRATIONS_BUCKET } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8MB per file, enforced on upload
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf"];
-
-// EmailJS (and most email providers) get unreliable above ~10MB per message,
-// once base64 encoding overhead is included. We cap total attached bytes we
-// actually email, while still accepting and *storing* every valid upload above.
-const MAX_TOTAL_EMAIL_ATTACHMENT_BYTES = 9 * 1024 * 1024; // 9MB raw budget
 
 const REGISTRATION_FEE = 100;
 const FIRST_MONTH_TUITION = 350;
@@ -32,13 +26,38 @@ const FIELD_LABELS: Record<string, string> = {
   proofOfInsurance: "Proof of Insurance",
 };
 
-emailjs.init({
-  publicKey: process.env.EMAILJS_PUBLIC_KEY,
-  privateKey: process.env.EMAILJS_PRIVATE_KEY,
-});
+// EmailJS init is wrapped: if keys are missing or malformed, we log a clear
+// warning instead of crashing the entire route at module load time. Without
+// this, every registration submission would fail with a 500 the moment
+// EMAILJS_PUBLIC_KEY / EMAILJS_PRIVATE_KEY are unset, even though email is
+// meant to be a best-effort extra, not a requirement for registering.
+try {
+  if (process.env.EMAILJS_PUBLIC_KEY && process.env.EMAILJS_PRIVATE_KEY) {
+    emailjs.init({
+      publicKey: process.env.EMAILJS_PUBLIC_KEY,
+      privateKey: process.env.EMAILJS_PRIVATE_KEY,
+    });
+  } else {
+    console.warn(
+      "EmailJS not initialized — EMAILJS_PUBLIC_KEY and/or EMAILJS_PRIVATE_KEY are missing from environment variables. Registrations will still save, but no email will be sent until these are set in .env.local (and the dev server restarted)."
+    );
+  }
+} catch (err) {
+  console.error("EmailJS initialization failed:", err);
+}
 
 export async function POST(req: NextRequest) {
   try {
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        {
+          error:
+            "Registration storage isn't configured yet. Set SUPABASE_URL and SUPABASE_SECRET_KEY in .env.local and restart the server.",
+        },
+        { status: 500 }
+      );
+    }
+
     const formData = await req.formData();
 
     // --- Extract & validate basic text fields ---
@@ -78,13 +97,13 @@ export async function POST(req: NextRequest) {
     const emergencyContact = formData.get("emergencyContact");
     const notes = formData.get("notes");
 
-    // --- Validate & save document uploads ---
+    // --- Validate & upload documents to Supabase Storage ---
     const submissionId = randomUUID();
-    const uploadDir = path.join("/home/claude/elpai/uploads", submissionId);
 
-    const savedFiles: Record<string, string> = {};
-    // Keep buffers in memory only long enough to build email attachments below.
-    const fileBuffers: { field: string; fileName: string; mimeType: string; buffer: Buffer }[] = [];
+    // Stores field -> storage path, so the admin dashboard can generate
+    // signed (temporary, private) download links later.
+    const storedFiles: Record<string, string> = {};
+    const uploadedLabels: string[] = [];
 
     const documentFields = [
       ...REQUIRED_DOCUMENT_FIELDS.map((f) => ({ field: f, required: true })),
@@ -118,47 +137,94 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      await mkdir(uploadDir, { recursive: true });
       const ext = file.name.split(".").pop() || "bin";
-      const safeName = `${field}.${ext}`;
+      const storagePath = `${submissionId}/${field}.${ext}`;
       const buffer = Buffer.from(await file.arrayBuffer());
-      await writeFile(path.join(uploadDir, safeName), buffer);
-      savedFiles[field] = safeName;
-      fileBuffers.push({ field, fileName: safeName, mimeType: file.type, buffer });
+
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from(REGISTRATIONS_BUCKET)
+        .upload(storagePath, buffer, {
+          contentType: file.type,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error(`Supabase upload failed for ${field}:`, uploadError);
+        return NextResponse.json(
+          { error: "Something went wrong uploading your documents. Please try again." },
+          { status: 500 }
+        );
+      }
+
+      storedFiles[field] = storagePath;
+      uploadedLabels.push(FIELD_LABELS[field] ?? field);
     }
 
     // --- Compute fees server-side (source of truth, never trust client math) ---
     const firstMonthTotal = REGISTRATION_FEE + FIRST_MONTH_TUITION;
+    const schoolStartDate = "2026-09-07";
+    const submittedAt = new Date().toISOString();
 
-    // --- Persist a record of the submission (always happens, regardless of email outcome) ---
-    const record = {
-      submissionId,
-      submittedAt: new Date().toISOString(),
-      schoolStartDate: "2026-09-07",
-      ...values,
-      emergencyContact: typeof emergencyContact === "string" ? emergencyContact : "",
+    // --- Persist the registration record in the database (always happens,
+    // regardless of email outcome — this is now the source of truth, not
+    // local disk, since local disk doesn't survive a deploy). ---
+    const { error: dbError } = await supabaseAdmin.from("registrations").insert({
+      id: submissionId,
+      submitted_at: submittedAt,
+      school_start_date: schoolStartDate,
+      child_first_name: values.childFirstName,
+      child_last_name: values.childLastName,
+      child_dob: values.childDob,
+      program: values.program,
+      uniform_size: values.uniformSize,
+      parent_name: values.parentName,
+      parent_email: values.parentEmail,
+      parent_phone: values.parentPhone,
+      emergency_contact: typeof emergencyContact === "string" ? emergencyContact : "",
       notes: typeof notes === "string" ? notes : "",
-      files: savedFiles,
-      fees: {
-        registrationFee: REGISTRATION_FEE,
-        firstMonthTuition: FIRST_MONTH_TUITION,
-        firstMonthTotal,
-        monthlyTuitionAfter: MONTHLY_TUITION,
-      },
-    };
+      payment_method: values.paymentMethod,
+      agreed_to_policy: true,
+      registration_fee: REGISTRATION_FEE,
+      first_month_tuition: FIRST_MONTH_TUITION,
+      first_month_total: firstMonthTotal,
+      monthly_tuition_after: MONTHLY_TUITION,
+      files: storedFiles,
+    });
 
-    await mkdir("/home/claude/elpai/uploads", { recursive: true });
-    await writeFile(
-      path.join(uploadDir, "submission.json"),
-      JSON.stringify(record, null, 2)
-    );
+    if (dbError) {
+      console.error("Supabase database insert failed:", dbError);
+      return NextResponse.json(
+        { error: "Something went wrong saving your registration. Please try again." },
+        { status: 500 }
+      );
+    }
 
-    // --- Email the school via EmailJS (best-effort: a failure here never fails the registration) ---
+    // --- Email the school a NOTIFICATION ONLY (no attachments — documents
+    // now live in the admin dashboard instead, avoiding EmailJS's small
+    // attachment size limits entirely). A failure here never fails the
+    // registration itself; it's always already saved by this point. ---
     let emailSent = false;
     let emailError: string | null = null;
 
     try {
-      emailSent = await sendRegistrationEmail(record, fileBuffers);
+      emailSent = await sendRegistrationNotification({
+        submissionId,
+        submittedAt,
+        schoolStartDate,
+        childName: `${values.childFirstName} ${values.childLastName}`,
+        childDob: values.childDob,
+        program: values.program,
+        uniformSize: values.uniformSize,
+        parentName: values.parentName,
+        parentEmail: values.parentEmail,
+        parentPhone: values.parentPhone,
+        emergencyContact: typeof emergencyContact === "string" ? emergencyContact : "",
+        notes: typeof notes === "string" ? notes : "",
+        paymentMethod: values.paymentMethod,
+        firstMonthTotal,
+        monthlyTuitionAfter: MONTHLY_TUITION,
+        documentsUploaded: uploadedLabels,
+      });
     } catch (err) {
       emailError = extractEmailJsErrorMessage(err);
       console.error("EmailJS send failed:", err);
@@ -167,7 +233,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       submissionId,
-      fees: record.fees,
+      fees: {
+        registrationFee: REGISTRATION_FEE,
+        firstMonthTuition: FIRST_MONTH_TUITION,
+        firstMonthTotal,
+        monthlyTuitionAfter: MONTHLY_TUITION,
+      },
       emailSent,
       emailError,
     });
@@ -191,69 +262,55 @@ function extractEmailJsErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Unknown email error";
 }
 
-async function sendRegistrationEmail(
-  record: Record<string, unknown>,
-  fileBuffers: { field: string; fileName: string; mimeType: string; buffer: Buffer }[]
-): Promise<boolean> {
+async function sendRegistrationNotification(data: {
+  submissionId: string;
+  submittedAt: string;
+  schoolStartDate: string;
+  childName: string;
+  childDob: string;
+  program: string;
+  uniformSize: string;
+  parentName: string;
+  parentEmail: string;
+  parentPhone: string;
+  emergencyContact: string;
+  notes: string;
+  paymentMethod: string;
+  firstMonthTotal: number;
+  monthlyTuitionAfter: number;
+  documentsUploaded: string[];
+}): Promise<boolean> {
   const serviceId = process.env.EMAILJS_SERVICE_ID;
   const templateId = process.env.EMAILJS_TEMPLATE_ID;
   const toEmail = process.env.EMAILJS_TO_EMAIL;
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
 
   if (!serviceId || !templateId || !toEmail) {
-    console.warn("EmailJS env vars missing — skipping email send. Submission was still saved to disk.");
+    console.warn("EmailJS env vars missing — skipping email send. Registration was still saved.");
     return false;
   }
 
-  // Stay under the total attachment budget: include files in priority order
-  // (required documents first) until we'd exceed the budget, and note any
-  // that were left out so the school knows to check the saved-files folder.
-  let runningBytes = 0;
-  const includedAttachments: { name: string; data: string }[] = [];
-  const omittedFileNames: string[] = [];
-
-  for (const f of fileBuffers) {
-    if (runningBytes + f.buffer.length > MAX_TOTAL_EMAIL_ATTACHMENT_BYTES) {
-      omittedFileNames.push(`${FIELD_LABELS[f.field] ?? f.field} (${f.fileName})`);
-      continue;
-    }
-    runningBytes += f.buffer.length;
-    const base64 = f.buffer.toString("base64");
-    includedAttachments.push({
-      name: `attachment_${f.field}`,
-      data: `data:${f.mimeType};base64,${base64}`,
-    });
-  }
-
-  const templateParams: Record<string, unknown> = {
+  const templateParams = {
     to_email: toEmail,
-    submission_id: record.submissionId,
-    submitted_at: record.submittedAt,
-    school_start_date: record.schoolStartDate,
-    child_name: `${record.childFirstName} ${record.childLastName}`,
-    child_dob: record.childDob,
-    program: record.program,
-    uniform_size: record.uniformSize,
-    parent_name: record.parentName,
-    parent_email: record.parentEmail,
-    parent_phone: record.parentPhone,
-    emergency_contact: record.emergencyContact || "—",
-    notes: record.notes || "—",
-    payment_method: record.paymentMethod,
+    submission_id: data.submissionId,
+    submitted_at: data.submittedAt,
+    school_start_date: data.schoolStartDate,
+    child_name: data.childName,
+    child_dob: data.childDob,
+    program: data.program,
+    uniform_size: data.uniformSize,
+    parent_name: data.parentName,
+    parent_email: data.parentEmail,
+    parent_phone: data.parentPhone,
+    emergency_contact: data.emergencyContact || "—",
+    notes: data.notes || "",
+    payment_method: data.paymentMethod,
     policy_agreed: "Yes",
-    first_month_total: (record.fees as { firstMonthTotal: number }).firstMonthTotal,
-    monthly_tuition_after: (record.fees as { monthlyTuitionAfter: number }).monthlyTuitionAfter,
-    documents_included: includedAttachments.map((a) => a.name).join(", ") || "none",
-    documents_omitted:
-      omittedFileNames.length > 0
-        ? `${omittedFileNames.join(", ")} — too large to email, saved on server only`
-        : "none",
+    first_month_total: data.firstMonthTotal,
+    monthly_tuition_after: data.monthlyTuitionAfter,
+    documents_uploaded: data.documentsUploaded.join(", ") || "none",
+    admin_link: siteUrl ? `${siteUrl}/admin` : "(set NEXT_PUBLIC_SITE_URL to enable this link)",
   };
-
-  // Attach each file as its own variable attachment param, matching the
-  // parameter names configured in the EmailJS template's Attachments tab.
-  for (const att of includedAttachments) {
-    templateParams[att.name] = att.data;
-  }
 
   await emailjs.send(serviceId, templateId, templateParams);
   return true;

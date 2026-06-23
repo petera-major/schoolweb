@@ -79,7 +79,7 @@ const WHY_US = [
   { icon: ShieldCheck, text: "Safe & secure environment" },
   { icon: Utensils, text: "Nutritious meals & snacks" },
   { icon: Sparkles, text: "Engaging, hands-on learning" },
-  { icon: Clock, text: "Flexible drop-off & pick-up" },
+  { icon: Clock, text: "7:30 AM Drop Off and 3 PM Pickup" },
   { icon: MessageCircle, text: "Real-time parent updates" },
 ];
 
@@ -88,7 +88,7 @@ const POLICIES = [
   "A $25 late fee applies to late payments and is non-negotiable.",
   "Withdrawing from the school requires a 30% return fee.",
   "Uniforms must be purchased from the school and display the school logo.",
-  "Early drop-off (8:00 AM) must be arranged in advance with administration.",
+  "Early drop-off (7:30 AM) must be arranged in advance with administration.",
   "Proof of insurance is mandatory for every enrolled student.",
   "Children with a contagious illness or symptoms must stay home.",
 ];
@@ -120,7 +120,11 @@ const FAQS = [
   },
   {
     q: "What sizes do the uniforms come in?",
-    a: "Uniforms range from 3T–4T up through 9T–10T, so there's a size for every age group we serve, from PreK3 through Grade 1.",
+    a: "Uniforms range from 3T–4T up through 9–10, so there's a size for every age group we serve, from PreK3 through Grade 1.",
+  },
+  {
+    q: "Is there afterschool care?",
+    a: "Yes, aferschool care begins at 3pm until 5pm. It's an extra 20$ daily.",
   },
 ];
 

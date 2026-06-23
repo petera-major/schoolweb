@@ -20,9 +20,9 @@ export default function Footer() {
             Visit or Call
           </p>
           <ul className="text-sm space-y-2 opacity-90">
-            <li>Willams Avenue, Nassau, The Bahamas</li>
+            <li>123 Learning Lane, Your Town</li>
             <li>effectivelearningabaco@gmail.com</li>
-            <li>Mon–Fri · 8:00 AM – 5:00 PM</li>
+            <li>Mon–Fri · 7:30 AM – 5:00 PM</li>
           </ul>
         </div>
 
@@ -38,8 +38,14 @@ export default function Footer() {
           </ul>
         </div>
       </div>
-      <div className="border-t border-white/10 py-5 px-5 text-center text-xs opacity-60 flex items-center justify-center gap-1.5">
-        Made with <HeartDoodle className="w-4 h-4 inline" color="#F4A8C6" /> for our little learners
+      <div className="border-t border-white/10 py-5 px-5 text-center text-xs opacity-60 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-1.5">
+        <span className="flex items-center gap-1.5">
+          Made with <HeartDoodle className="w-4 h-4 inline" color="#F4A8C6" /> for our little learners
+        </span>
+        <span className="hidden sm:inline opacity-40">·</span>
+        <Link href="/admin" className="hover:text-[var(--orange)] underline underline-offset-2">
+          Staff Login
+        </Link>
       </div>
     </footer>
   );
