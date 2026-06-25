@@ -20,8 +20,9 @@ export default function Footer() {
             Visit or Call
           </p>
           <ul className="text-sm space-y-2 opacity-90">
-            <li>123 Learning Lane, Your Town</li>
+            <li>Willams Avenue, Marsh Harbour</li>
             <li>effectivelearningabaco@gmail.com</li>
+            <li>(242)816-7831</li>
             <li>Mon–Fri · 7:30 AM – 5:00 PM</li>
           </ul>
         </div>
